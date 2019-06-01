@@ -83,13 +83,23 @@ const unsigned char RC[11] = {
     0x80, 0x1b, 0x36
 };
 
-unsigned char mul(unsigned char x)
+unsigned char mul(unsigned char x, unsigned char y=2)
 {
-    /* multiplication {02}*x in GF(2^8) */
+    /* multiply x * y in GF(2^8)  */
     
-    x = x&0x80?(x<<1)^0x1b:x<<1;
-    return x;
+    unsigned char r=0;
+    
+    if(y&0x01) r = x;
+    while(y>>=1)
+    {
+        x = x&0x80?(x<<1)^0x1b:x<<1;
+        if(y&0x01)
+            r = r ^ x;
+    }
+
+    return r;
 }
+
 
 void SubWord(unsigned char (&tmp)[4])
 {
@@ -116,7 +126,12 @@ aes128::aes128(const ByteArray& key)
         {
             m_key[i] = key[i];
         }
-    
+    if(m_key.size()==KEY_SIZE)
+    {
+        // key expansion for cipher
+        KeyExpansion();
+        
+    }
 }
 
 
@@ -127,7 +142,6 @@ void aes128::encrypt(const ByteArray &pt
     
     if(pt.size()==BLOCK_SIZE)
     {
-        KeyExpansion();
         sm = ByteArray(BLOCK_SIZE);
         for(r=0; r<4; r++)
         {
@@ -137,7 +151,6 @@ void aes128::encrypt(const ByteArray &pt
                 
             }
         }
-    
         AddRoundKey(0);
         
         for(int round=1; round<NR; round++)
@@ -146,12 +159,12 @@ void aes128::encrypt(const ByteArray &pt
             Shiftrows();
             MixColumns();
             AddRoundKey(round);
+  
         }
-        
         SubBytes();
         Shiftrows();
         AddRoundKey(NR);
-
+        
         for(r=0; r<4; r++)
         {
             for(c=0; c<NB; c++)
@@ -161,6 +174,43 @@ void aes128::encrypt(const ByteArray &pt
         }
     }
 
+}
+
+void aes128::decrypt(const ByteArray &sm, ByteArray &pt)
+{
+    int r,c;
+    
+    if(sm.size()==BLOCK_SIZE)
+    {
+        pt = ByteArray(BLOCK_SIZE);
+        for(r=0; r<4; r++)
+        {
+            for(c=0; c<NB; c++)
+            {
+                m_state[r][c] = sm[r+4*c];
+                
+            }
+        }
+        AddRoundKey(NR);
+        for(int round=NR-1; round>0; round--)
+        {
+            InvShiftRows();
+            InvSubBytes();
+            AddRoundKey(round);
+            InvMixColumns();
+        }
+        InvShiftRows();
+        InvSubBytes();
+        AddRoundKey(0);
+        
+        for(r=0; r<4; r++)
+        {
+            for(c=0; c<NB; c++)
+            {
+                pt[r+4*c] = m_state[r][c];
+            }
+        }
+    }
 }
 
 void aes128::KeyExpansion()
@@ -207,13 +257,28 @@ void aes128::MixColumns()
     unsigned char t_state[4][NB];
     for(int c=0; c<NB; c++)
     {
-        t_state[0][c] = mul(m_state[0][c]) ^ mul(m_state[1][c]) ^ m_state[1][c] ^ m_state[2][c] ^ m_state[3][c];
+        t_state[0][c] = mul(m_state[0][c]) ^ mul(m_state[1][c],0x03) ^ m_state[2][c] ^ m_state[3][c];
         
-        t_state[1][c] = m_state[0][c] ^ mul(m_state[1][c]) ^ mul(m_state[2][c]) ^ m_state[2][c] ^ m_state[3][c];
+        t_state[1][c] = m_state[0][c] ^ mul(m_state[1][c]) ^ mul(m_state[2][c],0x03) ^ m_state[3][c];
         
-        t_state[2][c] = m_state[0][c] ^ m_state[1][c] ^ mul(m_state[2][c]) ^ mul(m_state[3][c]) ^ m_state[3][c];
+        t_state[2][c] = m_state[0][c] ^ m_state[1][c] ^ mul(m_state[2][c]) ^ mul(m_state[3][c],0x03);
         
-        t_state[3][c] = mul(m_state[0][c]) ^ m_state[0][c] ^ m_state[1][c] ^ m_state[2][c] ^ mul(m_state[3][c]);
+        t_state[3][c] = mul(m_state[0][c],0x03) ^ m_state[1][c] ^ m_state[2][c] ^ mul(m_state[3][c]);
+    }
+    for(int r=0;r<4;r++)
+        for(int c=0;c<4;c++)
+            m_state[r][c] = t_state[r][c];
+}
+
+void aes128::InvMixColumns()
+{
+    unsigned char t_state[4][NB];
+    for(int c=0; c<NB; c++)
+    {
+        t_state[0][c] = mul(m_state[0][c],0x0e) ^ mul(m_state[1][c],0x0b) ^ mul(m_state[2][c],0x0d) ^ mul(m_state[3][c],0x09);
+        t_state[1][c] = mul(m_state[0][c],0x09) ^ mul(m_state[1][c],0x0e) ^ mul(m_state[2][c],0x0b) ^ mul(m_state[3][c],0x0d);
+        t_state[2][c] = mul(m_state[0][c],0x0d) ^ mul(m_state[1][c],0x09) ^ mul(m_state[2][c],0x0e) ^ mul(m_state[3][c],0x0b);
+        t_state[3][c] = mul(m_state[0][c],0x0b) ^ mul(m_state[1][c],0x0d) ^ mul(m_state[2][c],0x09) ^ mul(m_state[3][c],0x0e);
     }
     for(int r=0;r<4;r++)
         for(int c=0;c<4;c++)
@@ -244,6 +309,31 @@ void aes128::Shiftrows()
     m_state[3][1] = tmp;
     
 }
+
+void aes128::InvShiftRows()
+{
+    unsigned char tmp;
+    
+    tmp = m_state[1][3];
+    m_state[1][3] = m_state[1][2];
+    m_state[1][2] = m_state[1][1];
+    m_state[1][1] = m_state[1][0];
+    m_state[1][0] = tmp;
+    
+    tmp = m_state[2][2];
+    m_state[2][2] = m_state[2][0];
+    m_state[2][0] = tmp;
+    tmp = m_state[2][3];
+    m_state[2][3] = m_state[2][1];
+    m_state[2][1] = tmp;
+    
+    tmp = m_state[3][1];
+    m_state[3][1] = m_state[3][2];
+    m_state[3][2] = m_state[3][3];
+    m_state[3][3] = m_state[3][0];
+    m_state[3][0] = tmp;
+}
+
 void aes128::SubBytes()
 {
     for(int r=0; r<4; r++)
@@ -255,12 +345,23 @@ void aes128::SubBytes()
     }
 }
 
+void aes128::InvSubBytes()
+{
+    for(int r=0; r<4; r++)
+    {
+        for(int c=0; c<NB; c++)
+        {
+            m_state[r][c] = sboxinv[m_state[r][c]];
+        }
+    }
+}
+
 void aes128::get_state()
 {
     for(int c=0;c<4;c++)
     {
         for(int r=0;r<4;r++)
-            std::cout<<std::hex<<int(m_state[r][c]);
+            std::cout<<std::hex<< std::setfill('0') << std::setw(2) << int(m_state[r][c]);
     }
     std::cout<<std::endl;
 }

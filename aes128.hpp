@@ -11,6 +11,7 @@
 
 #include <stdio.h>
 #include <vector>
+#include <iomanip>
 #endif /* aes128_hpp */
 
 typedef std::vector<unsigned char> ByteArray;
@@ -25,18 +26,24 @@ class aes128
     public:
         aes128(const ByteArray& key);
         //~aes128();
-    
         void encrypt(const ByteArray &pt, ByteArray &sm);
-        //void decrypt(const ByteArray &sm, ByteArray &pt);
+        void decrypt(const ByteArray &sm, ByteArray &pt);
+    
     private:
         unsigned char m_state[4][NB];
         unsigned char m_rkey[(NR+1)*4][4];
+        unsigned char m_inv_rkey[(NR+1)*4][4];
         ByteArray m_key;
+    
         void AddRoundKey(const int round);
         void KeyExpansion();
         void SubBytes();
         void Shiftrows();
         void MixColumns();
+    
+        void InvShiftRows();
+        void InvSubBytes();
+        void InvMixColumns();
     
         void get_state();
     

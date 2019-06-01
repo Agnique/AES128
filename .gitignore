@@ -1,1 +1,3 @@
-.pic/
+pic/
+*.req
+*.rsp

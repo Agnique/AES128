@@ -16,14 +16,12 @@ void ReadHex(ifstream &fin, ByteArray &value, const int size);
 
 int main() {
     
-    //FILE *fp_req, *fp_rsp;
-    //unsigned char pt[BLOCK_SIZE];  // plain text
-    //unsigned char key[KEY_SIZE];   // key
-    //unsigned char sm[BLOCK_SIZE];  // secret message
     
-    ByteArray key(KEY_SIZE);
-    ByteArray pt(BLOCK_SIZE);
-    ByteArray sm(BLOCK_SIZE);
+    ByteArray key(KEY_SIZE);  // key
+    ByteArray pt(BLOCK_SIZE); // plain text
+    ByteArray sm(BLOCK_SIZE); // secret message
+    ByteArray dt(BLOCK_SIZE); // decrypted text
+    
     string str;
     ifstream inFile;
     ofstream outFile;
@@ -61,6 +59,9 @@ int main() {
     aes128 cipher(key);
     cipher.encrypt(pt, sm);
     
+    /* === Decryption === */
+    cipher.decrypt(sm, dt);
+    
     /* === writing to .rsp file === */
     outFile.open("AES128_KAT.rsp");
     str = "key:";
@@ -84,6 +85,14 @@ int main() {
     for(int i=0; i<BLOCK_SIZE; i++)
     {
         outFile << hex << setfill('0') << setw(2) << int(sm[i]);
+        
+    }
+    outFile << endl;
+    str = "decrypted text:";
+    outFile << str << endl;
+    for(int i=0; i<BLOCK_SIZE; i++)
+    {
+        outFile << hex << setfill('0') << setw(2) << int(dt[i]);
         
     }
     outFile << endl;
