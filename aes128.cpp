@@ -122,16 +122,17 @@ void RotWord(unsigned char (&tmp)[4])
 aes128::aes128(const ByteArray& key)
 {
     m_key.resize(key.size()==KEY_SIZE?KEY_SIZE:0);
+    
     for(ByteArray::size_type i=0; i<m_key.size(); i++)
-        {
-            m_key[i] = key[i];
-        }
+        m_key[i] = key[i];
+    
     if(m_key.size()==KEY_SIZE)
     {
         // key expansion for cipher
         KeyExpansion();
         
     }
+
 }
 
 
