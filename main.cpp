@@ -101,7 +101,7 @@ int main(int argc, char* argv[]) {
         outFile << endl;
     }
     
-    // ===   AES128 CFB mode   === //
+    // ===   AES128 CFB128 mode   === //
     else if(argc == 2 && strcmp(argv[1], "cfb")==0)
     {
         
@@ -109,8 +109,9 @@ int main(int argc, char* argv[]) {
         ByteArray s_pt;
         ByteArray s_sm;
         ByteArray s_dt;
-        
-        unsigned char ch;
+        char buffer[16];
+        char ch;
+        int cnt;
         
         inFile.open("KAT/AES128_cfb_KAT.req");
         if(!inFile.is_open())
@@ -149,26 +150,68 @@ int main(int argc, char* argv[]) {
         aes128 cipher(key);
         
         cipher.encrypt(shift_reg, sm);
+        //inFile.read(buffer, sizeof(buffer));
         inFile >> noskipws >> ch;
+
         while(inFile.good())
         {
-            s_pt.push_back(ch);
-            ch = ch ^ sm[0];
-            Shift(shift_reg, ch);
-            s_sm.push_back(ch);
-            cipher.encrypt(shift_reg, sm);
-            inFile >> noskipws >> ch;
+            buffer[0] = ch;
+            cnt = 0;
+            // read 128 bits
+            while (cnt<15 && inFile.good())
+            {
+                inFile >> noskipws >> ch;
+                cnt += 1;
+                buffer[cnt] = ch;
+            }
+            if(cnt==15)
+            {
+                shift_reg.clear();
+                for(int i=0;i<16;i++)
+                {
+                    s_pt.push_back(buffer[i]);
+                    buffer[i] = buffer[i] ^ sm[i];
+                    s_sm.push_back(buffer[i]);
+                    shift_reg.push_back(buffer[i]);
+                }
+                cipher.encrypt(shift_reg, sm);
+                inFile >> noskipws >> ch;
+            }
+            else
+            {
+                for(;cnt<16;cnt++)
+                {
+                    buffer[cnt] = 0x00;
+                }
+                shift_reg.clear();
+                for(int i=0;i<16;i++)
+                {
+                    s_pt.push_back(buffer[i]);
+                    buffer[i] = buffer[i] ^ sm[i];
+                    s_sm.push_back(buffer[i]);
+                    shift_reg.push_back(buffer[i]);
+                }
+                break;
+            }
+
         }
+
         
         // === CFB decryption === //
         shift_reg.clear();
         shift_reg.assign(iv.begin(), iv.end());
-        for(int i=0;i<s_sm.size();i++)
+        
+        for(int i=0;i<s_sm.size();i+=16)
         {
             cipher.encrypt(shift_reg, sm);
-            ch = sm[0] ^ s_sm[i];
-            s_dt.push_back(ch);
-            Shift(shift_reg, s_sm[i]);
+            shift_reg.clear();
+            for(int j=0;j<16;j++)
+            {
+                ch = sm[j] ^ s_sm[i+j];
+                s_dt.push_back(ch);
+                shift_reg.push_back(s_sm[i+j]);
+            }
+            
         }
         
         /* === writing to .rsp file === */
